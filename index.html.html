@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ElectricGroupMaule | Cursos de Electricidad y Energía Solar</title>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, updatePassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, getDoc, getDocs, deleteDoc, query } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+
+        // ═══════════════════════════════════════════════════════════════
+        // 🔴 BLOQUE 1: FIREBASE CONFIG (reemplazá con tus datos reales)
+        // Firebase Console → Configuración → Tus apps → Web
+        // ═══════════════════════════════════════════════════════════════
+        const firebaseConfig = {
+            apiKey: "AIzaSyAQUI_TU_API_KEY",
+            authDomain: "electricgroupmaule.firebaseapp.com",
+            projectId: "electricgroupmaule",
+            storageBucket: "electricgroupmaule.appspot.com",
+            messagingSenderId: "123456789",
+            appId: "1:123456789:web:abcdef"
+        };
+
+        // 🔴 BLOQUE 2: TU UID DE ADMIN
+        // Firebase Console → Authentication → Users → copiá tu UID
+        const ADMIN_UID = "AQUI_TU_UID_DE_ADMIN";
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        let currentUser = null;
+        let isAdmin = false;
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUser = user;
+                checkAdmin(user.uid);
+                if (!isAdmin) {
+                    document.getElementById('accessLogin').style.display = 'none';
+                    document.getElementById('studentPanel').classList.add('visible');
+                    document.getElementById('welcomeName').textContent = user.displayName || user.email;
+                }
+            } else {
+                currentUser = null;
+                isAdmin = false;
+                localStorage.removeItem('adminLogged');
+                document.getElementById('accessLogin').style.display = 'block';
+                document.getElementById('studentPanel').classList.remove('visible');
+                document.getElementById('adminPanel').classList.remove('visible');
+                loadOpinions();
+            }
+        });
+
+        async function checkAdmin(uid) {
+            try {
+                const adminRef = doc(db, "config", "admin");
+                const docSnap = await getDoc(adminRef);
+                if (docSnap.exists() && docSnap.data().uid === uid) {
+                    isAdmin = true;
+                    localStorage.setItem('adminLogged', 'true');
+                    document.getElementById('adminPanel').classList.add('visible');
+                    loadStudents();
+                    loadOpinions();
+                }
+            } catch (e) {
+                console.warn("No se pudo verificar admin:", e.message);
+            }
+        }
+
+        // ========== AUTENTICACIÓN ==========
+        window.loginStudent = async function() {
+            const email = document.getElementById('studentEmail').value.trim();
+            const password = document.getElementById('studentPassword').value;
+            try {
+                await signInWithEmailAndPassword(auth, email, password);
+                document.getElementById('accessError').style.display = 'none';
+            } catch (error) {
+                document.getElementById('accessError').style.display = 'block';
+            }
+        };
+
+        window.changePassword = async function() {
+            const newPass = document.getElementById('newPassword').value;
+            if (newPass.length < 6) { alert('La contraseña debe tener al menos 6 caracteres.'); return; }
+            try {
+                await updatePassword(currentUser, newPass);
+                alert('Contraseña actualizada correctamente.');
+                document.getElementById('changePasswordForm').style.display = 'none';
+                document.getElementById('newPassword').value = '';
+            } catch (error) {
+                alert('Error al cambiar contraseña. Vuelve a iniciar sesión.');
+            }
+        };
+
+        window.showChangePassword = function() {
+            document.getElementById('changePasswordForm').style.display = 'block';
+        };
+
+        // ========== ADMIN ==========
+        window.adminLogin = async function() {
+            const email = document.getElementById('adminEmail').value.trim();
+            const password = document.getElementById('adminPassword').value;
+            try {
+                await signInWithEmailAndPassword(auth, email, password);
+                setTimeout(async () => {
+                    if (currentUser && isAdmin) {
+                        document.getElementById('adminPanel').classList.add('visible');
+                        document.getElementById('adminError').style.display = 'none';
+                        loadStudents();
+                    } else {
+                        await signOut(auth);
+                        alert('No tienes permisos de administrador.');
+                    }
+                }, 500);
+            } catch (error) {
+                document.getElementById('adminError').style.display = 'block';
+            }
+        };
+
+        window.adminLogout = async function() {
+            if (!confirm('¿Cerrar sesión de administrador?')) return;
+            await signOut(auth);
+            location.reload();
+        };
+
+        window.addStudent = async function() {
+            const name = document.getElementById('newStudentName').value.trim();
+            const email = document.getElementById('newStudentEmail').value.trim();
+            const course = document.getElementById('newStudentCourse').value;
+            if (!name || !email) { alert('Completa nombre y correo.'); return; }
+            const tempPassword = Math.random().toString(36).slice(-10);
+            try {
+                const userCredential = await createUserWithEmailAndPassword(auth, email, tempPassword);
+                const userId = userCredential.user.uid;
+                await setDoc(doc(db, "alumnos", userId), {
+                    nombre: name, email: email, curso: course,
+                    fechaRegistro: new Date(), activo: true
+                });
+                alert(`Alumno creado.\n\nCorreo: ${email}\nContraseña temporal: ${tempPassword}\n\nDebe cambiarla al iniciar sesión.`);
+                document.getElementById('newStudentName').value = '';
+                document.getElementById('newStudentEmail').value = '';
+            } catch (error) {
+                alert('Error al crear alumno: ' + error.message);
+            }
+        };
+
+        window.loadStudents = async function() {
+            const studentsList = document.getElementById('studentsList');
+            studentsList.innerHTML = '';
+            try {
+                const q = query(collection(db, "alumnos"));
+                const querySnapshot = await getDocs(q);
+                querySnapshot.forEach((docSnap) => {
+                    const data = docSnap.data();
+                    const div = document.createElement('div');
+                    div.style.padding = '10px';
+                    div.style.borderBottom = '1px solid rgba(255,255,255,0.1)';
+                    div.innerHTML = `<strong>${data.nombre}</strong> (${data.email}) - ${data.curso}
+                        <button class="btn btn-secondary" style="padding:2px 10px; font-size:0.7rem; margin-left:10px;" onclick="deleteStudent('${docSnap.id}')">Eliminar</button>`;
+                    studentsList.appendChild(div);
+                });
+            } catch (e) { console.warn("No se pudo cargar alumnos:", e.message); }
+        };
+
+        window.deleteStudent = async function(userId) {
+            if (!confirm('¿Eliminar este alumno?')) return;
+            try { await deleteDoc(doc(db, "alumnos", userId)); loadStudents(); }
+            catch (e) { alert("Error al eliminar: " + e.message); }
+        };
+
+        // ========== TEMARIOS ==========
+        const temarios = {
+            temario1: { titulo: 'Temario Instalaciones Domiciliarias', items: [
+                'Unidad 1: Conceptos básicos de electricidad','Unidad 2: Circuitos eléctricos y componentes',
+                'Unidad 3: Normativa SEC y seguridad','Unidad 4: Instalación de enchufes e interruptores',
+                'Unidad 5: Tableros eléctricos y protecciones','Unidad 6: Proyecto final: instalación completa'] },
+            temario2: { titulo: 'Temario Diseño de Sistemas Solares', items: [
+                'Unidad 1: Energía solar y componentes fotovoltaicos','Unidad 2: Dimensionamiento de sistemas',
+                'Unidad 3: Diseño de arreglos solares','Unidad 4: Normativa y conexión a red (Net Billing)',
+                'Unidad 5: Software de diseño','Unidad 6: Proyecto final: diseño de sistema residencial'] },
+            temario3: { titulo: 'Temario Certificación T4 y Ley Net Billing', items: [
+                'Unidad 1: Marco regulatorio SEC','Unidad 2: Ley Net Billing y generación distribuida',
+                'Unidad 3: Diseño y montaje de sistemas','Unidad 4: Trámites y documentación',
+                'Unidad 5: Simulacros de examen T4','Unidad 6: Preparación final y casos prácticos'] }
+        };
+
+        window.showTemario = function(key) {
+            const modal = document.getElementById('modalTemario');
+            const titulo = document.getElementById('modalTitulo');
+            const lista = document.getElementById('modalLista');
+            const data = temarios[key];
+            if (!data) return;
+            titulo.textContent = data.titulo;
+            lista.innerHTML = '';
+            data.items.forEach(item => {
+                const li = document.createElement('li');
+                li.textContent = item;
+                lista.appendChild(li);
+            });
+            modal.classList.add('active');
+        };
+
+        window.closeTemario = function() {
+            document.getElementById('modalTemario').classList.remove('active');
+        };
+
+        document.getElementById('modalTemario').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) closeTemario();
+        });
+
+        // ========== OPINIONES ==========
+        window.addOpinion = function() {
+            const name = document.getElementById('opinionName').value.trim();
+            const text = document.getElementById('opinionText').value.trim();
+            if (!name || !text) { alert('Por favor completa todos los campos.'); return; }
+            let opinions = JSON.parse(localStorage.getItem('opinions_EGM')) || [];
+            opinions.unshift({ id: Date.now(), name, text, date: new Date().toLocaleDateString('es-CL') });
+            localStorage.setItem('opinions_EGM', JSON.stringify(opinions));
+            document.getElementById('opinionName').value = '';
+            document.getElementById('opinionText').value = '';
+            loadOpinions();
+        };
+
+        window.loadOpinions = function() {
+            const opinions = JSON.parse(localStorage.getItem('opinions_EGM')) || [];
+            const list = document.getElementById('opinionList');
+            list.innerHTML = '';
+            const adminActivo = isAdmin;
+            opinions.forEach(o => {
+                const div = document.createElement('div');
+                div.className = 'opinion-item';
+                div.innerHTML = `<span class="opinion-name">${o.name}</span>
+                    <p class="opinion-text">${o.text}</p>
+                    <span class="opinion-date">${o.date}</span>
+                    ${adminActivo ? `<button class="btn btn-secondary" style="padding: 5px 10px; font-size:0.7rem; margin-left:10px;" onclick="deleteOpinion(${o.id})">Eliminar</button>` : ''}`;
+                list.appendChild(div);
+            });
+        };
+
+        // Eliminación de opinión: solo admin autenticado en Firebase
+        window.deleteOpinion = function(id) {
+            if (!isAdmin) {
+                alert('Solo el administrador puede eliminar comentarios.');
+                return;
+            }
+            if (!confirm('¿Eliminar este comentario?')) return;
+            let opinions = JSON.parse(localStorage.getItem('opinions_EGM')) || [];
+            opinions = opinions.filter(o => o.id !== id);
+            localStorage.setItem('opinions_EGM', JSON.stringify(opinions));
+            loadOpinions();
+        };
+
+        loadOpinions();
+    </script>
+
+    <style>
+        :root { --color-primary: #0a0f1a; --color-secondary: #111827; --color-accent: #f5c542; --color-accent2: #ff8c42; --color-solar: #ffd700; --color-blue: #4d9de0; --color-text: #e8e8e8; --color-whatsapp: #25d366; --color-mercadopago: #009ee3; --shadow: 0 20px 40px rgba(0,0,0,0.4); --shadow-light: 0 10px 30px rgba(0,0,0,0.2); --border-radius: 16px; --transition: all 0.35s cubic-bezier(0.25,0.46,0.45,0.94); }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--color-primary); color: var(--color-text); line-height: 1.7; overflow-x: hidden; }
+        header { position: fixed; top: 0; left: 0; width: 100%; z-index: 1000; background: rgba(10,15,26,0.95); backdrop-filter: blur(14px); border-bottom: 2px solid rgba(245,197,66,0.4); transition: var(--transition); }
+        header.scrolled { box-shadow: 0 8px 30px rgba(0,0,0,0.6); border-bottom-color: var(--color-accent); }
+        .nav-container { max-width: 1200px; margin: 0 auto; padding: 0 20px; display: flex; justify-content: space-between; align-items: center; height: 76px; }
+        .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+        .logo-icon { width: 46px; height: 46px; background: linear-gradient(135deg, var(--color-accent), var(--color-accent2)); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 900; color: #0a0f1a; box-shadow: 0 4px 20px rgba(245,197,66,0.5); animation: glow 2s infinite alternate; }
+        @keyframes glow { 0% { box-shadow: 0 4px 20px rgba(245,197,66,0.5); } 100% { box-shadow: 0 4px 30px rgba(245,197,66,0.8); } }
+        .logo-text { font-size: 1.5rem; font-weight: 900; color: #fff; letter-spacing: -0.5px; }
+        .logo-text span { color: var(--color-accent); }
+        .nav-links { display: flex; gap: 26px; list-style: none; align-items: center; }
+        .nav-links a { color: var(--color-text); text-decoration: none; font-weight: 500; font-size: 0.95rem; transition: var(--transition); position: relative; padding: 5px 0; }
+        .nav-links a::after { content: ''; position: absolute; bottom: -2px; left: 0; width: 0; height: 2px; background: var(--color-accent); transition: var(--transition); border-radius: 2px; }
+        .nav-links a:hover::after, .nav-links a.active::after { width: 100%; }
+        .nav-links a:hover { color: var(--color-accent); }
+        .nav-cta { background: linear-gradient(135deg, var(--color-accent), var(--color-accent2)); color: #0a0f1a !important; padding: 10px 24px !important; border-radius: 30px; font-weight: 700 !important; box-shadow: 0 4px 20px rgba(245,197,66,0.4); }
+        .nav-cta:hover { transform: translateY(-3px); box-shadow: 0 10px 30px rgba(245,197,66,0.6); }
+        .menu-toggle { display: none; flex-direction: column; gap: 5px; cursor: pointer; background: none; border: none; padding: 5px; }
+        .menu-toggle span { width: 30px; height: 3px; background: var(--color-accent); border-radius: 3px; transition: var(--transition); }
+        .menu-toggle.active span:nth-child(1) { transform: rotate(45deg) translate(6px,7px); }
+        .menu-toggle.active span:nth-child(2) { opacity: 0; }
+        .menu-toggle.active span:nth-child(3) { transform: rotate(-45deg) translate(6px,-7px); }
+
+        .hero { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 130px 20px 70px; background: linear-gradient(160deg, #0a0f1a 0%, #14202e 40%, #0f3460 100%); position: relative; overflow: hidden; }
+        .hero::before { content: ''; position: absolute; top: -30%; right: -20%; width: 700px; height: 700px; background: radial-gradient(circle, rgba(245,197,66,0.2) 0%, transparent 70%); border-radius: 50%; animation: pulse 5s ease-in-out infinite; }
+        .hero::after { content: ''; position: absolute; bottom: -30%; left: -15%; width: 600px; height: 600px; background: radial-gradient(circle, rgba(77,157,224,0.15) 0%, transparent 70%); border-radius: 50%; animation: pulse 7s ease-in-out infinite reverse; }
+        @keyframes pulse { 0%,100% { transform: scale(1); opacity: 0.7; } 50% { transform: scale(1.1); opacity: 1; } }
+        .hero-content { max-width: 1200px; width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 50px; align-items: center; position: relative; z-index: 1; }
+        .hero-text h1 { font-size: 3.8rem; font-weight: 900; line-height: 1.1; margin-bottom: 20px; letter-spacing: -1px; }
+        .hero-text h1 .highlight { background: linear-gradient(135deg, var(--color-accent), var(--color-solar), var(--color-accent2)); -webkit-background-clip: text; background-clip: text; color: transparent; animation: shimmer 2.5s ease-in-out infinite; }
+        @keyframes shimmer { 0%,100% { filter: brightness(1); } 50% { filter: brightness(1.4); } }
+        .hero-text p { font-size: 1.25rem; color: #c0c0c0; margin-bottom: 30px; max-width: 520px; }
+        .hero-buttons { display: flex; gap: 16px; flex-wrap: wrap; }
+        .btn { padding: 15px 32px; border-radius: 40px; font-size: 1rem; font-weight: 700; cursor: pointer; transition: var(--transition); text-decoration: none; display: inline-flex; align-items: center; gap: 8px; border: none; letter-spacing: 0.3px; }
+        .btn-primary { background: linear-gradient(135deg, var(--color-accent), var(--color-accent2)); color: #0a0f1a; box-shadow: 0 8px 30px rgba(245,197,66,0.5); }
+        .btn-primary:hover { transform: translateY(-4px) scale(1.02); box-shadow: 0 15px 40px rgba(245,197,66,0.7); }
+        .btn-secondary { background: transparent; color: var(--color-accent); border: 2px solid var(--color-accent); }
+        .btn-secondary:hover { background: rgba(245,197,66,0.1); transform: translateY(-4px); }
+        .btn-mercadopago { background: var(--color-mercadopago); color: #fff; box-shadow: 0 8px 25px rgba(0,158,227,0.4); }
+        .btn-mercadopago:hover { transform: translateY(-3px); box-shadow: 0 12px 35px rgba(0,158,227,0.6); color: #fff; }
+        .btn-whatsapp { background: var(--color-whatsapp); color: #fff; box-shadow: 0 8px 25px rgba(37,211,102,0.4); }
+        .btn-whatsapp:hover { transform: translateY(-3px); box-shadow: 0 12px 35px rgba(37,211,102,0.6); color: #fff; }
+        .hero-stats { display: flex; gap: 30px; margin-top: 40px; }
+        .stat-item { text-align: center; background: rgba(255,255,255,0.05); border-radius: 12px; padding: 15px 20px; backdrop-filter: blur(5px); }
+        .stat-number { font-size: 2.2rem; font-weight: 900; color: var(--color-accent); display: block; }
+        .stat-label { font-size: 0.85rem; color: #aaa; }
+        .hero-image { display: flex; justify-content: center; align-items: center; position: relative; }
+        .hero-image-inner { width: 100%; max-width: 480px; aspect-ratio: 1; background: linear-gradient(145deg, rgba(245,197,66,0.25), rgba(77,157,224,0.2)); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 130px; box-shadow: 0 40px 80px rgba(0,0,0,0.5), inset 0 0 80px rgba(245,197,66,0.15); animation: float 5s ease-in-out infinite; border: 3px solid rgba(245,197,66,0.4); }
+        @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-25px); } }
+
+        section { padding: 90px 20px; }
+        .section-container { max-width: 1200px; margin: 0 auto; }
+        .section-title { text-align: center; font-size: 2.8rem; font-weight: 900; margin-bottom: 15px; letter-spacing: -0.5px; }
+        .section-title span { color: var(--color-accent); }
+        .section-subtitle { text-align: center; color: #b0b0b0; font-size: 1.15rem; max-width: 650px; margin: 0 auto 55px; }
+
+        .courses-section { background: var(--color-secondary); }
+        .courses-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 35px; }
+        .course-card { background: #1a2537; border-radius: var(--border-radius); overflow: hidden; box-shadow: var(--shadow-light); transition: var(--transition); border: 1px solid rgba(255,255,255,0.08); display: flex; flex-direction: column; }
+        .course-card:hover { transform: translateY(-12px); box-shadow: var(--shadow); border-color: rgba(245,197,66,0.5); }
+        .course-card-image { height: 200px; background-size: cover; background-position: center; display: flex; align-items: center; justify-content: center; font-size: 70px; position: relative; }
+        .course-card-image::after { content: ''; position: absolute; inset: 0; background: linear-gradient(to bottom, transparent 40%, rgba(10,15,26,0.95)); }
+        .course-card-badge { position: absolute; top: 15px; right: 15px; background: var(--color-accent); color: #0a0f1a; padding: 6px 16px; border-radius: 25px; font-size: 0.85rem; font-weight: 800; z-index: 2; }
+        .course-card-content { padding: 25px; flex: 1; display: flex; flex-direction: column; }
+        .course-card-content h3 { font-size: 1.4rem; font-weight: 800; margin-bottom: 10px; color: #fff; }
+        .course-card-content p { color: #aaa; font-size: 0.95rem; margin-bottom: 15px; }
+        .course-meta { display: flex; gap: 15px; font-size: 0.85rem; color: #999; margin-bottom: 15px; flex-wrap: wrap; }
+        .course-price { font-size: 2rem; font-weight: 900; color: var(--color-accent); display: block; margin-bottom: 5px; }
+        .course-price-old { font-size: 1.1rem; color: #888; text-decoration: line-through; margin-left: 10px; font-weight: 400; }
+        .course-card .btn { width: 100%; justify-content: center; margin-top: 10px; padding: 14px; font-size: 1rem; }
+        .btn-temario { background: #2a3a4f; color: var(--color-accent); border: 1px solid rgba(245,197,66,0.3); }
+        .btn-temario:hover { background: #3a4a5f; transform: translateY(-2px); }
+
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 2000; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
+        .modal-overlay.active { opacity: 1; pointer-events: auto; }
+        .modal-content { background: #1a2537; border-radius: var(--border-radius); padding: 40px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; box-shadow: var(--shadow); border: 1px solid rgba(245,197,66,0.3); position: relative; }
+        .modal-close { position: absolute; top: 15px; right: 20px; font-size: 2rem; cursor: pointer; color: var(--color-accent); background: none; border: none; }
+        .modal-content h3 { color: var(--color-accent); margin-bottom: 20px; text-align: center; }
+        .modal-content ul { list-style: none; padding: 0; }
+        .modal-content li { padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05); color: #ddd; }
+
+        .features-section { background: var(--color-primary); }
+        .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 25px; }
+        .feature-item { background: #1a2537; border-radius: var(--border-radius); padding: 35px 25px; text-align: center; transition: var(--transition); border: 1px solid rgba(255,255,255,0.08); }
+        .feature-item:hover { transform: translateY(-8px); border-color: rgba(245,197,66,0.5); background: #1e2a3d; }
+        .feature-icon { font-size: 55px; margin-bottom: 18px; display: block; }
+        .feature-item h3 { font-size: 1.2rem; font-weight: 700; margin-bottom: 8px; color: #fff; }
+        .feature-item p { font-size: 0.9rem; color: #aaa; }
+
+        .instructor-section { background: var(--color-secondary); }
+        .instructor-wrapper { display: flex; align-items: center; gap: 50px; background: #1a2537; border-radius: var(--border-radius); padding: 50px; border: 1px solid rgba(255,255,255,0.08); }
+        .instructor-avatar { flex-shrink: 0; width: 220px; height: 220px; border-radius: 50%; background: linear-gradient(135deg, var(--color-accent), var(--color-accent2)); display: flex; align-items: center; justify-content: center; font-size: 80px; font-weight: 900; color: #0a0f1a; box-shadow: 0 20px 40px rgba(245,197,66,0.4); border: 4px solid rgba(255,255,255,0.2); }
+        .instructor-info h3 { font-size: 2.2rem; font-weight: 900; color: #fff; margin-bottom: 8px; }
+        .instructor-info .instructor-title { font-size: 1.2rem; color: var(--color-accent); font-weight: 600; margin-bottom: 15px; }
+        .instructor-info p { color: #bbb; font-size: 1rem; line-height: 1.8; }
+
+        .testimonials-section { background: var(--color-primary); }
+        .testimonials-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 25px; }
+        .testimonial-card { background: #1a2537; border-radius: var(--border-radius); padding: 35px; border: 1px solid rgba(255,255,255,0.08); }
+        .testimonial-card:hover { border-color: rgba(245,197,66,0.4); transform: translateY(-5px); }
+        .testimonial-stars { color: var(--color-accent); font-size: 1.3rem; margin-bottom: 15px; letter-spacing: 4px; }
+        .testimonial-text { color: #ccc; font-style: italic; font-size: 0.95rem; margin-bottom: 20px; line-height: 1.7; }
+        .testimonial-author { display: flex; align-items: center; gap: 12px; }
+        .testimonial-avatar { width: 45px; height: 45px; border-radius: 50%; background: linear-gradient(135deg, var(--color-accent), var(--color-accent2)); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1.2rem; color: #0a0f1a; }
+        .testimonial-name { font-weight: 700; color: #fff; font-size: 0.95rem; }
+        .testimonial-role { font-size: 0.8rem; color: #999; }
+
+        .opinions-section { background: var(--color-secondary); }
+        .opinions-container { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 40px; }
+        .opinion-form-card { background: #1a2537; border-radius: var(--border-radius); padding: 30px; border: 1px solid rgba(255,255,255,0.08); }
+        .opinion-form-card h3 { color: var(--color-accent); margin-bottom: 20px; }
+        .opinion-list { background: #1a2537; border-radius: var(--border-radius); padding: 30px; border: 1px solid rgba(255,255,255,0.08); max-height: 400px; overflow-y: auto; }
+        .opinion-item { padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.05); margin-bottom: 10px; }
+        .opinion-item .opinion-name { font-weight: 700; color: var(--color-accent); }
+        .opinion-item .opinion-text { color: #ddd; font-size: 0.9rem; margin-top: 5px; }
+        .opinion-item .opinion-date { font-size: 0.75rem; color: #777; margin-top: 5px; }
+
+        .pricing-section { background: var(--color-secondary); }
+        .pricing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 30px; align-items: stretch; }
+        .pricing-card { background: #1a2537; border-radius: var(--border-radius); padding: 45px 30px; text-align: center; border: 1px solid rgba(255,255,255,0.08); transition: var(--transition); position: relative; display: flex; flex-direction: column; }
+        .pricing-card:hover { transform: translateY(-10px); border-color: rgba(245,197,66,0.4); box-shadow: var(--shadow); }
+        .pricing-card.featured { border: 2px solid var(--color-accent); background: linear-gradient(160deg, #1a2537, #2a2410); }
+        .pricing-card.featured::before { content: 'MÁS DEMANDADO'; position: absolute; top: -15px; left: 50%; transform: translateX(-50%); background: var(--color-accent); color: #0a0f1a; padding: 6px 22px; border-radius: 25px; font-size: 0.8rem; font-weight: 800; letter-spacing: 1px; }
+        .pricing-plan { font-size: 1.3rem; font-weight: 800; color: #fff; margin-bottom: 5px; }
+        .pricing-price { font-size: 2.8rem; font-weight: 900; color: var(--color-accent); margin: 15px 0; letter-spacing: -1px; }
+        .pricing-price span { font-size: 1rem; color: #999; font-weight: 400; }
+        .pricing-features { list-style: none; margin: 20px 0 30px; flex: 1; }
+        .pricing-features li { padding: 8px 0; color: #ccc; font-size: 0.9rem; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .pricing-features li::before { content: '✓ '; color: var(--color-accent); font-weight: 700; }
+
+        .private-classes-section { background: var(--color-primary); padding: 70px 20px; text-align: center; }
+        .private-card { background: #1a2537; border-radius: var(--border-radius); padding: 50px 30px; max-width: 600px; margin: 0 auto; border: 1px solid rgba(245,197,66,0.4); }
+        .private-card h3 { color: var(--color-accent); font-size: 2rem; margin-bottom: 15px; }
+        .private-card p { color: #ccc; margin-bottom: 25px; }
+
+        .how-to-pay { background: var(--color-primary); padding: 80px 20px; }
+        .steps-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 25px; margin-top: 40px; }
+        .step-card { background: #1a2537; border-radius: var(--border-radius); padding: 30px 20px; text-align: center; border: 1px solid rgba(255,255,255,0.08); }
+        .step-card:hover { border-color: rgba(245,197,66,0.4); transform: translateY(-5px); }
+        .step-number { display: inline-block; width: 50px; height: 50px; background: var(--color-accent); color: #0a0f1a; font-size: 1.5rem; font-weight: 900; border-radius: 50%; line-height: 50px; margin-bottom: 15px; }
+        .step-card h4 { color: #fff; font-size: 1.1rem; margin-bottom: 10px; }
+        .step-card p { color: #aaa; font-size: 0.9rem; }
+        .bank-info { background: #1a2537; border-radius: var(--border-radius); padding: 30px; margin-top: 40px; border: 1px dashed rgba(245,197,66,0.5); text-align: center; }
+        .bank-info h3 { color: var(--color-accent); margin-bottom: 15px; }
+        .bank-info p { color: #ddd; font-size: 1.1rem; }
+
+        .access-section { background: var(--color-secondary); }
+        .access-login { max-width: 400px; margin: 0 auto 40px; background: #1a2537; border-radius: var(--border-radius); padding: 30px; text-align: center; border: 1px solid rgba(255,255,255,0.08); }
+        .access-login input { width: 100%; padding: 14px 18px; border-radius: 10px; border: 1px solid #2a3a4f; background: #0a0f1a; color: #e0e0e0; font-size: 1rem; margin-bottom: 15px; text-align: center; }
+        .access-login input:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 4px rgba(245,197,66,0.2); }
+        .hidden-content { display: none; }
+        .hidden-content.visible { display: block; animation: fadeIn 0.5s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .student-resources { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 25px; margin-top: 20px; }
+        .resource-card { background: #1a2537; border-radius: var(--border-radius); padding: 30px; text-align: center; border: 1px solid rgba(255,255,255,0.08); transition: var(--transition); }
+        .resource-card:hover { transform: translateY(-5px); border-color: rgba(245,197,66,0.4); box-shadow: var(--shadow-light); }
+        .resource-icon { font-size: 45px; margin-bottom: 15px; display: block; }
+        .resource-card h4 { color: #fff; font-size: 1.1rem; margin-bottom: 10px; }
+        .resource-card p { color: #aaa; font-size: 0.9rem; margin-bottom: 15px; }
+        .resource-card a { color: var(--color-accent); text-decoration: none; font-weight: 600; }
+        .resource-card a:hover { text-decoration: underline; }
+
+        .contact-section { background: var(--color-primary); }
+        .contact-wrapper { display: grid; grid-template-columns: 1fr 1fr; gap: 50px; align-items: center; }
+        .contact-info h3 { font-size: 2.2rem; font-weight: 900; margin-bottom: 15px; color: #fff; }
+        .contact-detail { display: flex; align-items: center; gap: 15px; margin-bottom: 18px; color: #ddd; }
+        .contact-detail-icon { width: 50px; height: 50px; background: rgba(245,197,66,0.15); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 22px; color: var(--color-accent); }
+        .contact-form { background: #1a2537; border-radius: var(--border-radius); padding: 40px; box-shadow: var(--shadow-light); border: 1px solid rgba(255,255,255,0.08); }
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; margin-bottom: 8px; font-size: 0.9rem; font-weight: 600; color: #ccc; }
+        .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 14px 18px; border-radius: 10px; border: 1px solid #2a3a4f; background: #0a0f1a; color: #e0e0e0; font-size: 1rem; transition: var(--transition); font-family: inherit; }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 4px rgba(245,197,66,0.2); }
+        .form-group textarea { resize: vertical; min-height: 120px; }
+
+        footer { background: #060a12; padding: 40px 20px 20px; border-top: 1px solid rgba(255,255,255,0.05); }
+        .footer-container { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 30px; margin-bottom: 30px; }
+        .footer-col h4 { color: #fff; font-size: 1.1rem; font-weight: 700; margin-bottom: 15px; }
+        .footer-col p, .footer-col a { color: #999; font-size: 0.9rem; line-height: 1.8; text-decoration: none; display: block; transition: var(--transition); }
+        .footer-col a:hover { color: var(--color-accent); }
+        .footer-bottom { text-align: center; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.05); color: #777; font-size: 0.85rem; }
+        .whatsapp-float { position: fixed; bottom: 30px; right: 30px; width: 60px; height: 60px; background: var(--color-whatsapp); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 30px; color: #fff; box-shadow: 0 8px 30px rgba(37,211,102,0.5); z-index: 999; transition: var(--transition); text-decoration: none; animation: pulse-whatsapp 2s infinite; }
+        .whatsapp-float:hover { transform: scale(1.15); box-shadow: 0 15px 40px rgba(37,211,102,0.7); }
+        @keyframes pulse-whatsapp { 0%,100% { box-shadow: 0 8px 30px rgba(37,211,102,0.5); } 50% { box-shadow: 0 8px 45px rgba(37,211,102,0.8); } }
+
+        @media (max-width: 992px) {
+            .hero-content { grid-template-columns: 1fr; text-align: center; }
+            .hero-text p { margin: 0 auto 25px; }
+            .hero-buttons { justify-content: center; }
+            .hero-stats { justify-content: center; flex-wrap: wrap; }
+            .hero-image { order: -1; }
+            .hero-image-inner { max-width: 320px; font-size: 90px; }
+            .hero-text h1 { font-size: 2.8rem; }
+            .instructor-wrapper { flex-direction: column; text-align: center; padding: 35px; }
+            .instructor-avatar { width: 160px; height: 160px; font-size: 60px; }
+            .contact-wrapper { grid-template-columns: 1fr; }
+            .opinions-container { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 768px) {
+            .nav-links { display: none; position: absolute; top: 76px; left: 0; width: 100%; background: rgba(10,15,26,0.98); flex-direction: column; padding: 25px; gap: 20px; border-bottom: 2px solid var(--color-accent); backdrop-filter: blur(14px); }
+            .nav-links.open { display: flex; }
+            .menu-toggle { display: flex; }
+            .hero { padding-top: 110px; }
+            .hero-text h1 { font-size: 2.2rem; }
+            .section-title { font-size: 2rem; }
+            .courses-grid, .pricing-grid, .testimonials-grid, .features-grid { grid-template-columns: 1fr; }
+            .contact-form { padding: 25px; }
+            .whatsapp-float { bottom: 20px; right: 20px; width: 55px; height: 55px; font-size: 26px; }
+            .modal-content { padding: 25px; }
+        }
+    </style>
+</head>
+<body>
+    <header id="header">
+        <div class="nav-container">
+            <a href="#" class="logo">
+                <div class="logo-icon">⚡</div>
+                <div class="logo-text">Electric<span>Group</span>Maule</div>
+            </a>
+            <button class="menu-toggle" id="menuToggle" aria-label="Abrir menú">
+                <span></span><span></span><span></span>
+            </button>
+            <ul class="nav-links" id="navLinks">
+                <li><a href="#inicio" class="active">Inicio</a></li>
+                <li><a href="#cursos">Cursos</a></li>
+                <li><a href="#instructor">Instructor</a></li>
+                <li><a href="#opiniones">Opiniones</a></li>
+                <li><a href="#precios">Precios</a></li>
+                <li><a href="#pago">Cómo Pagar</a></li>
+                <li><a href="#clases-particulares">Clases Particulares</a></li>
+                <li><a href="#acceso-alumnos">Acceso Alumnos</a></li>
+                <li><a href="#contacto" class="nav-cta">Contacto</a></li>
+            </ul>
+        </div>
+    </header>
+
+    <section class="hero" id="inicio">
+        <div class="hero-content">
+            <div class="hero-text">
+                <h1>Domina la <span class="highlight">Electricidad</span> y la <span class="highlight">Energía Solar</span></h1>
+                <p>Aprende con el <strong>Ing. Nicolás Sánchez</strong>, Ingeniero Eléctrico mención Proyectos de Instalaciones Eléctricas de Media y Baja Tensión, especialista en Ley Net Billing. +150 instalaciones certificadas. Pago seguro con <strong>Mercado Pago</strong>.</p>
+                <div class="hero-buttons">
+                    <a href="#cursos" class="btn btn-primary">🔥 Ver Cursos</a>
+                    <a href="#clases-particulares" class="btn btn-secondary">🎓 Clases Particulares</a>
+                </div>
+                <div class="hero-stats">
+                    <div class="stat-item"><span class="stat-number">+150</span><span class="stat-label">Instalaciones certificadas</span></div>
+                    <div class="stat-item"><span class="stat-number">5</span><span class="stat-label">Años de experiencia</span></div>
+                    <div class="stat-item"><span class="stat-number">98%</span><span class="stat-label">Satisfacción</span></div>
+                </div>
+            </div>
+            <div class="hero-image"><div class="hero-image-inner">☀️</div></div>
+        </div>
+    </section>
+
+    <!-- CURSOS -->
+    <section class="courses-section" id="cursos">
+        <div class="section-container">
+            <h2 class="section-title">Nuestros <span>Cursos</span></h2>
+            <p class="section-subtitle">Formación especializada en electricidad, energía solar y certificaciones SEC. Paga con Mercado Pago o coordina por WhatsApp.</p>
+            <div class="courses-grid">
+                <div class="course-card">
+                    <div class="course-card-image" style="background: linear-gradient(135deg, #1e3a5f, #0f3460);">🏠<span class="course-card-badge">Presencial / Online</span></div>
+                    <div class="course-card-content">
+                        <h3>Instalaciones Domiciliarias</h3>
+                        <p>Aprende a realizar instalaciones eléctricas residenciales seguras y normativas, desde cero hasta nivel profesional.</p>
+                        <div class="course-meta"><span>📚 45 horas</span><span>📹 120 lecciones</span><span>📜 Certificado</span></div>
+                        <span class="course-price">$50.000 <span class="course-price-old">$89.990</span></span>
+                        <!-- 🔴 MP - Curso 1: Reemplazá el href por tu link de Mercado Pago -->
+                        <a href="https://wa.me/56993970158?text=Hola%2C%20quiero%20inscribirme%20en%20el%20curso%20de%20Instalaciones%20Domiciliarias%20%28%2450.000%29" target="_blank" rel="noopener" class="btn btn-mercadopago">💳 Inscribirme</a>
+                        <button class="btn btn-temario" onclick="showTemario('temario1')">📋 Ver Temario</button>
+                        <a href="https://wa.me/56993970158?text=Hola%2C%20tengo%20dudas%20sobre%20el%20curso%20de%20Instalaciones%20Domiciliarias" target="_blank" rel="noopener" class="btn btn-whatsapp">💬 Consultar por WhatsApp</a>
+                    </div>
+                </div>
+                <div class="course-card">
+                    <div class="course-card-image" style="background: linear-gradient(135deg, #1e5f3a, #0f5f30);">☀️<span class="course-card-badge">Online en vivo</span></div>
+                    <div class="course-card-content">
+                        <h3>Diseño de Sistemas Solares</h3>
+                        <p>Diseña sistemas fotovoltaicos completos, dimensionamiento, selección de componentes y normativa vigente.</p>
+                        <div class="course-meta"><span>📚 60 horas</span><span>📹 180 lecciones</span><span>📜 Certificado</span></div>
+                        <span class="course-price">$80.000 <span class="course-price-old">$149.990</span></span>
+                        <!-- 🔴 MP - Curso 2: Reemplazá el href por tu link de Mercado Pago -->
+                        <a href="https://wa.me/56993970158?text=Hola%2C%20quiero%20inscribirme%20en%20el%20curso%20de%20Dise%C3%B1o%20de%20Sistemas%20Solares%20%28%2480.000%29" target="_blank" rel="noopener" class="btn btn-mercadopago">💳 Inscribirme</a>
+                        <button class="btn btn-temario" onclick="showTemario('temario2')">📋 Ver Temario</button>
+                        <a href="https://wa.me/56993970158?text=Hola%2C%20tengo%20dudas%20sobre%20el%20curso%20de%20Dise%C3%B1o%20de%20Sistemas%20Solares" target="_blank" rel="noopener" class="btn btn-whatsapp">💬 Consultar por WhatsApp</a>
+                    </div>
+                </div>
+                <div class="course-card">
+                    <div class="course-card-image" style="background: linear-gradient(135deg, #5f1e5f, #7b2d7b);">📋<span class="course-card-badge">Certificación SEC</span></div>
+                    <div class="course-card-content">
+                        <h3>Certificación T4 y Ley Net Billing</h3>
+                        <p>Prepárate para obtener tu certificación SEC clase T4 y domina la Ley Net Billing para sistemas de generación distribuida.</p>
+                        <div class="course-meta"><span>📚 35 horas</span><span>📹 90 lecciones</span><span>📜 Certificado</span></div>
+                        <span class="course-price">$120.000 <span class="course-price-old">$199.990</span></span>
+                        <!-- 🔴 MP - Curso 3: Reemplazá el href por tu link de Mercado Pago -->
+                        <a href="https://wa.me/56993970158?text=Hola%2C%20quiero%20inscribirme%20en%20el%20curso%20de%20Certificaci%C3%B3n%20T4%20y%20Ley%20Net%20Billing%20%28%24120.000%29" target="_blank" rel="noopener" class="btn btn-mercadopago">💳 Inscribirme</a>
+                        <button class="btn btn-temario" onclick="showTemario('temario3')">📋 Ver Temario</button>
+                        <a href="https://wa.me/56993970158?text=Hola%2C%20tengo%20dudas%20sobre%20el%20curso%20de%20Certificaci%C3%B3n%20T4%20y%20Net%20Billing" target="_blank" rel="noopener" class="btn btn-whatsapp">💬 Consultar por WhatsApp</a>
+                    </div>
+                </div>
+                <div class="course-card" style="border-color: rgba(245,197,66,0.5);">
+                    <div class="course-card-image" style="background: linear-gradient(135deg, #8a6d3b, #5f4a1e);">👨‍🏫<span class="course-card-badge">Personalizado</span></div>
+                    <div class="course-card-content">
+                        <h3>Clases Particulares</h3>
+                        <p>Atención personalizada con el Ing. Nicolás Sánchez para resolver dudas específicas o preparar certificaciones.</p>
+                        <div class="course-meta"><span>⏰ Horario flexible</span><span>📹 Online/Presencial</span></div>
+                        <span class="course-price">Consultar</span>
+                        <a href="https://wa.me/56993970158?text=Hola%2C%20quiero%20consultar%20por%20Clases%20Particulares" target="_blank" rel="noopener" class="btn btn-whatsapp">💬 Consultar por WhatsApp</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="modal-overlay" id="modalTemario">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeTemario()">×</button>
+            <h3 id="modalTitulo">Temario</h3>
+            <div id="modalLista"></div>
+        </div>
+    </div>
+
+    <!-- CARACTERÍSTICAS -->
+    <section class="features-section" id="caracteristicas">
+        <div class="section-container">
+            <h2 class="section-title">¿Por qué elegir <span>ElectricGroupMaule</span>?</h2>
+            <p class="section-subtitle">Nuestro compromiso es formar profesionales competentes y seguros.</p>
+            <div class="features-grid">
+                <div class="feature-item"><span class="feature-icon">🎓</span><h3>Ingeniero Eléctrico</h3><p>Ing. Nicolás Sánchez, mención Proyectos de Instalaciones Eléctricas de MT/BT.</p></div>
+                <div class="feature-item"><span class="feature-icon">📜</span><h3>Certificación SEC</h3><p>Preparación intensiva para las certificaciones T1, T2 y T4 exigidas por la SEC.</p></div>
+                <div class="feature-item"><span class="feature-icon">☀️</span><h3>Ley Net Billing</h3><p>Especialista en generación distribuida, con más de 150 instalaciones certificadas.</p></div>
+                <div class="feature-item"><span class="feature-icon">📱</span><h3>Acceso Multiplataforma</h3><p>Estudia desde tu computador, tablet o celular. El material siempre disponible.</p></div>
+                <div class="feature-item"><span class="feature-icon">💬</span><h3>Soporte Personalizado</h3><p>Resuelve tus dudas directamente con el instructor a través de grupo privado.</p></div>
+                <div class="feature-item"><span class="feature-icon">🔧</span><h3>Prácticas Reales</h3><p>Desarrolla proyectos reales que podrás incluir en tu portafolio profesional.</p></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- INSTRUCTOR -->
+    <section class="instructor-section" id="instructor">
+        <div class="section-container">
+            <h2 class="section-title">Tu <span>Instructor</span></h2>
+            <p class="section-subtitle">Aprende de la mano de un experto en el área.</p>
+            <div class="instructor-wrapper">
+                <div class="instructor-avatar">NS</div>
+                <div class="instructor-info">
+                    <h3>Ing. Nicolás Sánchez</h3>
+                    <div class="instructor-title">Ingeniero Eléctrico · Mención Proyectos de Instalaciones Eléctricas de Media y Baja Tensión · Especialista Ley Net Billing</div>
+                    <p>Ingeniero eléctrico con mención en proyectos de instalaciones eléctricas de media y baja tensión. Cuenta con más de 5 años de experiencia en el rubro y ha certificado más de 150 instalaciones fotovoltaicas bajo la Ley Net Billing. Su metodología combina teoría sólida con práctica intensiva, asegurando que cada estudiante adquiera las competencias necesarias para desempeñarse con seguridad y confianza en el mundo laboral.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- TESTIMONIOS -->
+    <section class="testimonials-section" id="testimonios">
+        <div class="section-container">
+            <h2 class="section-title">Lo que dicen nuestros <span>estudiantes</span></h2>
+            <p class="section-subtitle">Resultados reales de personas que ya confiaron en nosotros.</p>
+            <div class="testimonials-grid">
+                <div class="testimonial-card">
+                    <div class="testimonial-stars">★★★★★</div>
+                    <p class="testimonial-text">"El curso de instalaciones domiciliarias superó todas mis expectativas. Nicolás explica todo con una claridad impresionante y las prácticas fueron clave para sentirme seguro."</p>
+                    <div class="testimonial-author"><div class="testimonial-avatar">J</div><div><div class="testimonial-name">Jorge Riquelme</div><div class="testimonial-role">Técnico Electricista</div></div></div>
+                </div>
+                <div class="testimonial-card">
+                    <div class="testimonial-stars">★★★★★</div>
+                    <p class="testimonial-text">"Gracias al curso de diseño solar, hoy tengo mi propio emprendimiento instalando paneles. La formación en Net Billing fue fundamental para ofrecer un servicio completo."</p>
+                    <div class="testimonial-author"><div class="testimonial-avatar">M</div><div><div class="testimonial-name">María José Fuentes</div><div class="testimonial-role">Técnico Electricista</div></div></div>
+                </div>
+                <div class="testimonial-card">
+                    <div class="testimonial-stars">★★★★★</div>
+                    <p class="testimonial-text">"Obtuve mi certificación T4 a la primera. El material de estudio y el acompañamiento de Nicolás fueron decisivos. 100% recomendado."</p>
+                    <div class="testimonial-author"><div class="testimonial-avatar">C</div><div><div class="testimonial-name">Carlos Morales</div><div class="testimonial-role">Ingeniero Electricista</div></div></div>
+                </div>
+                <div class="testimonial-card">
+                    <div class="testimonial-stars">★★★★★</div>
+                    <p class="testimonial-text">"Excelente curso, muy bien estructurado y práctico. Lo recomiendo totalmente para quienes quieren entrar al mundo de las instalaciones eléctricas."</p>
+                    <div class="testimonial-author"><div class="testimonial-avatar">P</div><div><div class="testimonial-name">Patricia González</div><div class="testimonial-role">Técnico Electricista</div></div></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- OPINIONES -->
+    <section class="opinions-section" id="opiniones">
+        <div class="section-container">
+            <h2 class="section-title">Deja tu <span>opinión</span></h2>
+            <p class="section-subtitle">Comparte tu experiencia y ayuda a otros a tomar la mejor decisión.</p>
+            <div class="opinions-container">
+                <div class="opinion-form-card">
+                    <h3>Escribe tu comentario</h3>
+                    <div class="form-group"><label for="opinionName">Tu nombre *</label><input type="text" id="opinionName" placeholder="Tu nombre" required></div>
+                    <div class="form-group"><label for="opinionText">Comentario *</label><textarea id="opinionText" placeholder="Cuéntanos tu experiencia..." required></textarea></div>
+                    <button class="btn btn-primary" style="width:100%;" onclick="addOpinion()">Publicar opinión</button>
+                </div>
+                <div class="opinion-list" id="opinionList"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- PLANES -->
+    <section class="pricing-section" id="precios">
+        <div class="section-container">
+            <h2 class="section-title">Inversión en tu <span>futuro</span></h2>
+            <p class="section-subtitle">Precios en pesos chilenos. Pago único, acceso inmediato.</p>
+            <div class="pricing-grid">
+                <div class="pricing-card">
+                    <div class="pricing-plan">Instalaciones Domiciliarias</div>
+                    <div class="pricing-price">$50.000 <span>CLP</span></div>
+                    <ul class="pricing-features">
+                        <li>Acceso al curso completo</li><li>45 horas de formación</li><li>Material descargable</li><li>Certificado de participación</li><li>Grupo de consultas</li>
+                    </ul>
+                    <!-- 🔴 MP - Precios curso 1 -->
+                    <a href="https://wa.me/56993970158?text=Hola%2C%20quiero%20inscribirme%20en%20el%20curso%20de%20Instalaciones%20Domiciliarias%20%28%2450.000%29" target="_blank" rel="noopener" class="btn btn-mercadopago">💳 Inscribirme</a>
+                </div>
+                <div class="pricing-card featured">
+                    <div class="pricing-plan">Diseño de Sistemas Solares</div>
+                    <div class="pricing-price">$80.000 <span>CLP</span></div>
+                    <ul class="pricing-features">
+                        <li>Acceso al curso completo</li><li>60 horas de formación</li><li>Proyecto final evaluado</li><li>Certificado de aprobación</li><li>Soporte prioritario</li>
+                    </ul>
+                    <!-- 🔴 MP - Precios curso 2 -->
+                    <a href="https://wa.me/56993970158?text=Hola%2C%20quiero%20inscribirme%20en%20el%20curso%20de%20Dise%C3%B1o%20de%20Sistemas%20Solares%20%28%2480.000%29" target="_blank" rel="noopener" class="btn btn-mercadopago">💳 Inscribirme</a>
+                </div>
+                <div class="pricing-card">
+                    <div class="pricing-plan">Certificación T4 + Net Billing</div>
+                    <div class="pricing-price">$120.000 <span>CLP</span></div>
+                    <ul class="pricing-features">
+                        <li>Preparación examen SEC</li><li>35 horas intensivas</li><li>Simulacros de examen</li><li>Asesoría personalizada</li><li>Material oficial actualizado</li>
+                    </ul>
+                    <!-- 🔴 MP - Precios curso 3 -->
+                    <a href="https://wa.me/56993970158?text=Hola%2C%20quiero%20inscribirme%20en%20el%20curso%20de%20Certificaci%C3%B3n%20T4%20y%20Net%20Billing%20%28%24120.000%29" target="_blank" rel="noopener" class="btn btn-mercadopago">💳 Inscribirme</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CLASES PARTICULARES -->
+    <section class="private-classes-section" id="clases-particulares">
+        <div class="section-container">
+            <div class="private-card">
+                <h3>🎓 Clases Particulares</h3>
+                <p>¿Necesitas una atención personalizada? Agenda una clase particular con el Ing. Nicolás Sánchez y resuelve todas tus dudas al instante. Ideal para reforzar temas específicos o preparar certificaciones.</p>
+                <a href="https://wa.me/56993970158?text=Hola%2C%20quiero%20consultar%20por%20Clases%20Particulares" target="_blank" rel="noopener" class="btn btn-whatsapp">💬 Solicitar Clase Particular</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- CÓMO PAGAR -->
+    <section class="how-to-pay" id="pago">
+        <div class="section-container">
+            <h2 class="section-title">¿Cómo <span>inscribirte</span>?</h2>
+            <p class="section-subtitle">Sigue estos sencillos pasos y comienza tu formación hoy mismo.</p>
+            <div class="steps-grid">
+                <div class="step-card"><div class="step-number">1</div><h4>Elige tu curso</h4><p>Revisa la descripción y selecciona el que mejor se adapte a tus objetivos.</p></div>
+                <div class="step-card"><div class="step-number">2</div><h4>Haz clic en "Inscribirme"</h4><p>Serás redirigido a Mercado Pago o podrás coordinar por WhatsApp.</p></div>
+                <div class="step-card"><div class="step-number">3</div><h4>Recibe tu acceso</h4><p>Una vez confirmado el pago, te enviaremos por correo las instrucciones y la contraseña de acceso.</p></div>
+                <div class="step-card"><div class="step-number">4</div><h4>¡Empieza a aprender!</h4><p>Accede a la plataforma y comienza a formarte con el Ing. Nicolás Sánchez.</p></div>
+            </div>
+            <div class="bank-info">
+                <h3>🏦 ¿Prefieres transferencia bancaria?</h3>
+                <p>También puedes pagar mediante transferencia a la siguiente cuenta:</p>
+                <p><strong>Banco Estado</strong> · Nicolás Sánchez · Cuenta RUT</p>
+                <p>Escríbenos por WhatsApp al <strong>+56 9 9397 0158</strong> y te enviamos los datos.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- ACCESO ALUMNOS -->
+    <section class="access-section" id="acceso-alumnos">
+        <div class="section-container">
+            <h2 class="section-title">Área <span>Alumnos</span></h2>
+            <p class="section-subtitle">Ingresa con tu correo y contraseña para acceder a los recursos.</p>
+            <div class="access-login" id="accessLogin">
+                <input type="email" id="studentEmail" placeholder="Correo electrónico" required>
+                <input type="password" id="studentPassword" placeholder="Contraseña" required>
+                <button class="btn btn-primary" style="width:100%;" onclick="loginStudent()">🔓 Ingresar</button>
+                <p id="accessError" style="color: #ff6b6b; margin-top: 10px; display: none;">Correo o contraseña incorrectos.</p>
+            </div>
+            <div id="studentPanel" class="hidden-content">
+                <h3 style="text-align:center; color: var(--color-accent); margin-bottom: 20px;">📚 Bienvenido, <span id="welcomeName"></span></h3>
+                <button class="btn btn-secondary" onclick="showChangePassword()" style="margin-bottom: 30px;">🔑 Cambiar contraseña</button>
+                <div id="changePasswordForm" style="display:none; margin-bottom:30px;">
+                    <input type="password" id="newPassword" placeholder="Nueva contraseña" style="width:100%; margin-bottom:10px;">
+                    <button class="btn btn-primary" onclick="changePassword()">Guardar nueva contraseña</button>
+                </div>
+                <div class="student-resources">
+                    <div class="resource-card"><span class="resource-icon">📖</span><h4>Temario del curso</h4><p>Accede al temario completo.</p><a href="#" onclick="showTemario('temario1')">Ver temario →</a></div>
+                    <div class="resource-card"><span class="resource-icon">🎥</span><h4>Videos de clases</h4><p>Más de 100 videos explicativos.</p><a href="#" target="_blank">Ir a los videos →</a></div>
+                    <div class="resource-card"><span class="resource-icon">📝</span><h4>Simulacros de examen</h4><p>Practica con exámenes tipo SEC.</p><a href="#" target="_blank">Hacer simulacro →</a></div>
+                    <div class="resource-card"><span class="resource-icon">📥</span><h4>Material descargable</h4><p>Guías, normativas y PDF.</p><a href="#" target="_blank">Descargar →</a></div>
+                </div>
+                <p style="text-align:center; margin-top: 30px; color: #aaa;">¿Tienes dudas? Contacta al instructor por WhatsApp <strong>+56 9 9397 0158</strong></p>
+            </div>
+
+            <div style="margin-top:60px;">
+                <h3 style="text-align:center; color:var(--color-accent); margin-bottom:20px;">Panel Administrador</h3>
+                <div class="access-login" style="max-width:400px; margin:0 auto 30px;">
+                    <input type="email" id="adminEmail" placeholder="Correo admin" required>
+                    <input type="password" id="adminPassword" placeholder="Contraseña" required>
+                    <button class="btn btn-secondary" onclick="adminLogin()">Entrar como admin</button>
+                    <p id="adminError" style="color:#ff6b6b; display:none;">Credenciales incorrectas</p>
+                </div>
+                <div id="adminPanel" class="hidden-content">
+                    <h4>Agregar alumno</h4>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:20px;">
+                        <input type="text" id="newStudentName" placeholder="Nombre" style="flex:1; min-width:150px;">
+                        <input type="email" id="newStudentEmail" placeholder="Correo" style="flex:2; min-width:200px;">
+                        <select id="newStudentCourse" style="flex:1; min-width:150px;">
+                            <option value="instalaciones-domiciliarias">Instalaciones Domiciliarias</option>
+                            <option value="diseño-sistemas-solares">Diseño Sistemas Solares</option>
+                            <option value="certificacion-t4-netbilling">Certificación T4 + Net Billing</option>
+                        </select>
+                        <button class="btn btn-primary" onclick="addStudent()">Crear alumno</button>
+                    </div>
+                    <h4>Lista de alumnos</h4>
+                    <div id="studentsList"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CONTACTO -->
+    <section class="contact-section" id="contacto">
+        <div class="section-container">
+            <h2 class="section-title">¿Tienes <span>dudas</span>?</h2>
+            <p class="section-subtitle">Déjanos tus datos y el Ing. Nicolás Sánchez te contactará personalmente para resolver todas tus preguntas.</p>
+            <div class="contact-wrapper">
+                <div class="contact-info">
+                    <h3>Contáctanos</h3>
+                    <p>¿Listo para dar el siguiente paso? Escríbenos y te responderemos a la brevedad.</p>
+                    <div class="contact-detail"><div class="contact-detail-icon">📧</div><div>electricgroupmaule@outlook.com</div></div>
+                    <div class="contact-detail"><div class="contact-detail-icon">📱</div><div>+56 9 9397 0158</div></div>
+                    <div class="contact-detail"><div class="contact-detail-icon">🕐</div><div>Lunes a Sábado: 9:00 - 19:00 hrs</div></div>
+                    <div class="contact-detail"><div class="contact-detail-icon">📍</div><div>Región del Maule, Chile</div></div>
+                    <a href="https://wa.me/56993970158?text=Hola%2C%20quiero%20hacer%20una%20consulta" target="_blank" rel="noopener" class="btn btn-whatsapp" style="margin-top:15px;">💬 Escribir por WhatsApp</a>
+                </div>
+                <form class="contact-form" id="contactForm" onsubmit="handleFormSubmit(event)">
+                    <div class="form-group"><label for="nombre">Nombre completo *</label><input type="text" id="nombre" name="nombre" placeholder="Tu nombre" required></div>
+                    <div class="form-group"><label for="email">Correo electrónico *</label><input type="email" id="email" name="email" placeholder="tucorreo@ejemplo.com" required></div>
+                    <div class="form-group"><label for="telefono">Teléfono / WhatsApp</label><input type="tel" id="telefono" name="telefono" placeholder="+56 9 1234 5678"></div>
+                    <div class="form-group">
+                        <label for="curso">Curso de interés *</label>
+                        <select id="curso" name="curso" required>
+                            <option value="">Selecciona un curso</option>
+                            <option value="Instalaciones Domiciliarias">Instalaciones Domiciliarias ($50.000)</option>
+                            <option value="Diseño de Sistemas Solares">Diseño de Sistemas Solares ($80.000)</option>
+                            <option value="Certificación T4 + Ley Net Billing">Certificación T4 + Ley Net Billing ($120.000)</option>
+                            <option value="Clases Particulares">Clases Particulares</option>
+                            <option value="Otra consulta">Otra consulta</option>
+                        </select>
+                    </div>
+                    <div class="form-group"><label for="mensaje">Mensaje (opcional)</label><textarea id="mensaje" name="mensaje" placeholder="Cuéntanos sobre tu experiencia o dudas..."></textarea></div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center;">✉️ Enviar Consulta</button>
+                    <p id="formMessage" style="margin-top: 15px; text-align: center; font-weight: 600; display: none;"></p>
+                </form>
+            </div>
+        </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer>
+        <div class="footer-container">
+            <div class="footer-col">
+                <h4>⚡ ElectricGroupMaule</h4>
+                <p>Formación especializada en electricidad, energía solar y certificaciones SEC. Aprende con expertos y transforma tu carrera profesional.</p>
+            </div>
+            <div class="footer-col">
+                <h4>Cursos</h4>
+                <a href="#cursos">Instalaciones Domiciliarias</a>
+                <a href="#cursos">Diseño de Sistemas Solares</a>
+                <a href="#cursos">Certificación T4 y Net Billing</a>
+                <a href="#clases-particulares">Clases Particulares</a>
+            </div>
+            <div class="footer-col">
+                <h4>Enlaces Rápidos</h4>
+                <a href="#inicio">Inicio</a>
+                <a href="#instructor">Instructor</a>
+                <a href="#opiniones">Opiniones</a>
+                <a href="#acceso-alumnos">Acceso Alumnos</a>
+            </div>
+            <div class="footer-col">
+                <h4>Contacto</h4>
+                <a href="mailto:electricgroupmaule@outlook.com">electricgroupmaule@outlook.com</a>
+                <a href="https://wa.me/56993970158" target="_blank" rel="noopener">+56 9 9397 0158</a>
+                <a href="#">Región del Maule, Chile</a>
+            </div>
+        </div>
+        <div class="footer-bottom">© 2025 ElectricGroupMaule. Todos los derechos reservados. Diseñado con ❤️ para futuros electricistas y especialistas solares.</div>
+    </footer>
+
+    <a href="https://wa.me/56993970158?text=Hola%2C%20quiero%20informaci%C3%B3n%20sobre%20los%20cursos" class="whatsapp-float" target="_blank" rel="noopener" aria-label="Contactar por WhatsApp">💬</a>
+
+    <script>
+        // Menú móvil
+        const menuToggle = document.getElementById('menuToggle');
+        const navLinks = document.getElementById('navLinks');
+        menuToggle.addEventListener('click', () => {
+            menuToggle.classList.toggle('active');
+            navLinks.classList.toggle('open');
+        });
+
+        // Smooth scroll
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function(e) {
+                const targetId = this.getAttribute('href');
+                if (targetId === '#') return;
+                const target = document.querySelector(targetId);
+                if (target) {
+                    e.preventDefault();
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    menuToggle.classList.remove('active');
+                    navLinks.classList.remove('open');
+                }
+            });
+        });
+
+        // Header scrolled + sección activa
+        window.addEventListener('scroll', () => {
+            const header = document.getElementById('header');
+            header.classList.toggle('scrolled', window.scrollY > 50);
+            const sections = document.querySelectorAll('section[id]');
+            let current = '';
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop - 120;
+                if (window.scrollY >= sectionTop) current = section.getAttribute('id');
+            });
+            document.querySelectorAll('.nav-links a').forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('href') === '#' + current) link.classList.add('active');
+            });
+        });
+
+        // Animaciones de entrada
+        const observerOptions = { threshold: 0.1, rootMargin: '0px 0px -50px 0px' };
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'translateY(0)';
+                }
+            });
+        }, observerOptions);
+        document.querySelectorAll('.course-card, .feature-item, .testimonial-card, .pricing-card, .instructor-wrapper, .step-card').forEach(card => {
+            card.style.opacity = '0';
+            card.style.transform = 'translateY(30px)';
+            card.style.transition = 'opacity 0.7s ease, transform 0.7s ease, box-shadow 0.3s ease, border-color 0.3s ease';
+            observer.observe(card);
+        });
+
+        // Formulario de contacto → WhatsApp
+        function handleFormSubmit(e) {
+            e.preventDefault();
+            const nombre = document.getElementById('nombre').value;
+            const email = document.getElementById('email').value;
+            const telefono = document.getElementById('telefono').value;
+            const curso = document.getElementById('curso').value;
+            const mensajeTexto = document.getElementById('mensaje').value;
+            const texto = `Hola, soy ${nombre}.\n\nCorreo: ${email}\nTeléfono: ${telefono || 'No indicado'}\nCurso de interés: ${curso}\n\nMensaje:\n${mensajeTexto || '(sin mensaje adicional)'}`;
+            const url = `https://wa.me/56993970158?text=${encodeURIComponent(texto)}`;
+            const aviso = document.getElementById('formMessage');
+            aviso.style.display = 'block';
+            aviso.style.color = 'var(--color-accent)';
+            aviso.textContent = `¡Gracias ${nombre}! Abriendo WhatsApp...`;
+            window.open(url, '_blank');
+            setTimeout(() => { aviso.style.display = 'none'; }, 6000);
+        }
+    </script>
+</body>
+</html>
