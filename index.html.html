@@ -11,7 +11,7 @@
         import { getFirestore, collection, doc, setDoc, getDoc, getDocs, deleteDoc, query } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 
         // ═══════════════════════════════════════════════════════════════
-        // 🔴 BLOQUE 1: FIREBASE CONFIG (reemplazá con tus datos reales)
+        // 🔴 BLOQUE 1: FIREBASE CONFIG — REEMPLAZAR CON TUS DATOS REALES
         // Firebase Console → Configuración → Tus apps → Web
         // ═══════════════════════════════════════════════════════════════
         const firebaseConfig = {
@@ -70,7 +70,6 @@
             }
         }
 
-        // ========== AUTENTICACIÓN ==========
         window.loginStudent = async function() {
             const email = document.getElementById('studentEmail').value.trim();
             const password = document.getElementById('studentPassword').value;
@@ -99,7 +98,6 @@
             document.getElementById('changePasswordForm').style.display = 'block';
         };
 
-        // ========== ADMIN ==========
         window.adminLogin = async function() {
             const email = document.getElementById('adminEmail').value.trim();
             const password = document.getElementById('adminPassword').value;
@@ -139,7 +137,7 @@
                     nombre: name, email: email, curso: course,
                     fechaRegistro: new Date(), activo: true
                 });
-                alert(`Alumno creado.\n\nCorreo: ${email}\nContraseña temporal: ${tempPassword}\n\nDebe cambiarla al iniciar sesión.`);
+                alert(`Alumno creado.\n\nCorreo: ${email}\nContraseña temporal: ${tempPassword}`);
                 document.getElementById('newStudentName').value = '';
                 document.getElementById('newStudentEmail').value = '';
             } catch (error) {
@@ -171,7 +169,6 @@
             catch (e) { alert("Error al eliminar: " + e.message); }
         };
 
-        // ========== TEMARIOS ==========
         const temarios = {
             temario1: { titulo: 'Temario Instalaciones Domiciliarias', items: [
                 'Unidad 1: Conceptos básicos de electricidad','Unidad 2: Circuitos eléctricos y componentes',
@@ -211,7 +208,6 @@
             if (e.target === e.currentTarget) closeTemario();
         });
 
-        // ========== OPINIONES ==========
         window.addOpinion = function() {
             const name = document.getElementById('opinionName').value.trim();
             const text = document.getElementById('opinionText').value.trim();
@@ -240,12 +236,8 @@
             });
         };
 
-        // Eliminación de opinión: solo admin autenticado en Firebase
         window.deleteOpinion = function(id) {
-            if (!isAdmin) {
-                alert('Solo el administrador puede eliminar comentarios.');
-                return;
-            }
+            if (!isAdmin) { alert('Solo el administrador puede eliminar comentarios.'); return; }
             if (!confirm('¿Eliminar este comentario?')) return;
             let opinions = JSON.parse(localStorage.getItem('opinions_EGM')) || [];
             opinions = opinions.filter(o => o.id !== id);
@@ -526,10 +518,9 @@
                         <p>Aprende a realizar instalaciones eléctricas residenciales seguras y normativas, desde cero hasta nivel profesional.</p>
                         <div class="course-meta"><span>📚 45 horas</span><span>📹 120 lecciones</span><span>📜 Certificado</span></div>
                         <span class="course-price">$50.000 <span class="course-price-old">$89.990</span></span>
-                        <!-- 🔴 MP - Curso 1: Reemplazá el href por tu link de Mercado Pago -->
-                        <a href="https://wa.me/56993970158?text=Hola%2C%20quiero%20inscribirme%20en%20el%20curso%20de%20Instalaciones%20Domiciliarias%20%28%2450.000%29" target="_blank" rel="noopener" class="btn btn-mercadopago">💳 Inscribirme</a>
+                        <a href="https://mpago.li/2i9mnTZ" target="_blank" rel="noopener" class="btn btn-mercadopago">💳 Pagar con Mercado Pago</a>
                         <button class="btn btn-temario" onclick="showTemario('temario1')">📋 Ver Temario</button>
-                        <a href="https://wa.me/56993970158?text=Hola%2C%20tengo%20dudas%20sobre%20el%20curso%20de%20Instalaciones%20Domiciliarias" target="_blank" rel="noopener" class="btn btn-whatsapp">💬 Consultar por WhatsApp</a>
+                        <a href="https://wa.me/56939701587?text=Hola%2C%20tengo%20dudas%20sobre%20el%20curso%20de%20Instalaciones%20Domiciliarias" target="_blank" rel="noopener" class="btn btn-whatsapp">💬 Consultar por WhatsApp</a>
                     </div>
                 </div>
                 <div class="course-card">
@@ -539,10 +530,9 @@
                         <p>Diseña sistemas fotovoltaicos completos, dimensionamiento, selección de componentes y normativa vigente.</p>
                         <div class="course-meta"><span>📚 60 horas</span><span>📹 180 lecciones</span><span>📜 Certificado</span></div>
                         <span class="course-price">$80.000 <span class="course-price-old">$149.990</span></span>
-                        <!-- 🔴 MP - Curso 2: Reemplazá el href por tu link de Mercado Pago -->
-                        <a href="https://wa.me/56993970158?text=Hola%2C%20quiero%20inscribirme%20en%20el%20curso%20de%20Dise%C3%B1o%20de%20Sistemas%20Solares%20%28%2480.000%29" target="_blank" rel="noopener" class="btn btn-mercadopago">💳 Inscribirme</a>
+                        <a href="https://mpago.li/1k3bQqK" target="_blank" rel="noopener" class="btn btn-mercadopago">💳 Pagar con Mercado Pago</a>
                         <button class="btn btn-temario" onclick="showTemario('temario2')">📋 Ver Temario</button>
-                        <a href="https://wa.me/56993970158?text=Hola%2C%20tengo%20dudas%20sobre%20el%20curso%20de%20Dise%C3%B1o%20de%20Sistemas%20Solares" target="_blank" rel="noopener" class="btn btn-whatsapp">💬 Consultar por WhatsApp</a>
+                        <a href="https://wa.me/56939701587?text=Hola%2C%20tengo%20dudas%20sobre%20el%20curso%20de%20Dise%C3%B1o%20de%20Sistemas%20Solares" target="_blank" rel="noopener" class="btn btn-whatsapp">💬 Consultar por WhatsApp</a>
                     </div>
                 </div>
                 <div class="course-card">
@@ -552,10 +542,9 @@
                         <p>Prepárate para obtener tu certificación SEC clase T4 y domina la Ley Net Billing para sistemas de generación distribuida.</p>
                         <div class="course-meta"><span>📚 35 horas</span><span>📹 90 lecciones</span><span>📜 Certificado</span></div>
                         <span class="course-price">$120.000 <span class="course-price-old">$199.990</span></span>
-                        <!-- 🔴 MP - Curso 3: Reemplazá el href por tu link de Mercado Pago -->
-                        <a href="https://wa.me/56993970158?text=Hola%2C%20quiero%20inscribirme%20en%20el%20curso%20de%20Certificaci%C3%B3n%20T4%20y%20Ley%20Net%20Billing%20%28%24120.000%29" target="_blank" rel="noopener" class="btn btn-mercadopago">💳 Inscribirme</a>
+                        <a href="https://mpago.li/1LiHmqE" target="_blank" rel="noopener" class="btn btn-mercadopago">💳 Pagar con Mercado Pago</a>
                         <button class="btn btn-temario" onclick="showTemario('temario3')">📋 Ver Temario</button>
-                        <a href="https://wa.me/56993970158?text=Hola%2C%20tengo%20dudas%20sobre%20el%20curso%20de%20Certificaci%C3%B3n%20T4%20y%20Net%20Billing" target="_blank" rel="noopener" class="btn btn-whatsapp">💬 Consultar por WhatsApp</a>
+                        <a href="https://wa.me/56939701587?text=Hola%2C%20tengo%20dudas%20sobre%20el%20curso%20de%20Certificaci%C3%B3n%20T4%20y%20Net%20Billing" target="_blank" rel="noopener" class="btn btn-whatsapp">💬 Consultar por WhatsApp</a>
                     </div>
                 </div>
                 <div class="course-card" style="border-color: rgba(245,197,66,0.5);">
@@ -565,7 +554,7 @@
                         <p>Atención personalizada con el Ing. Nicolás Sánchez para resolver dudas específicas o preparar certificaciones.</p>
                         <div class="course-meta"><span>⏰ Horario flexible</span><span>📹 Online/Presencial</span></div>
                         <span class="course-price">Consultar</span>
-                        <a href="https://wa.me/56993970158?text=Hola%2C%20quiero%20consultar%20por%20Clases%20Particulares" target="_blank" rel="noopener" class="btn btn-whatsapp">💬 Consultar por WhatsApp</a>
+                        <a href="https://wa.me/56939701587?text=Hola%2C%20quiero%20consultar%20por%20Clases%20Particulares" target="_blank" rel="noopener" class="btn btn-whatsapp">💬 Consultar por WhatsApp</a>
                     </div>
                 </div>
             </div>
@@ -671,8 +660,7 @@
                     <ul class="pricing-features">
                         <li>Acceso al curso completo</li><li>45 horas de formación</li><li>Material descargable</li><li>Certificado de participación</li><li>Grupo de consultas</li>
                     </ul>
-                    <!-- 🔴 MP - Precios curso 1 -->
-                    <a href="https://wa.me/56993970158?text=Hola%2C%20quiero%20inscribirme%20en%20el%20curso%20de%20Instalaciones%20Domiciliarias%20%28%2450.000%29" target="_blank" rel="noopener" class="btn btn-mercadopago">💳 Inscribirme</a>
+                    <a href="https://mpago.li/2i9mnTZ" target="_blank" rel="noopener" class="btn btn-mercadopago">💳 Pagar con Mercado Pago</a>
                 </div>
                 <div class="pricing-card featured">
                     <div class="pricing-plan">Diseño de Sistemas Solares</div>
@@ -680,8 +668,7 @@
                     <ul class="pricing-features">
                         <li>Acceso al curso completo</li><li>60 horas de formación</li><li>Proyecto final evaluado</li><li>Certificado de aprobación</li><li>Soporte prioritario</li>
                     </ul>
-                    <!-- 🔴 MP - Precios curso 2 -->
-                    <a href="https://wa.me/56993970158?text=Hola%2C%20quiero%20inscribirme%20en%20el%20curso%20de%20Dise%C3%B1o%20de%20Sistemas%20Solares%20%28%2480.000%29" target="_blank" rel="noopener" class="btn btn-mercadopago">💳 Inscribirme</a>
+                    <a href="https://mpago.li/1k3bQqK" target="_blank" rel="noopener" class="btn btn-mercadopago">💳 Pagar con Mercado Pago</a>
                 </div>
                 <div class="pricing-card">
                     <div class="pricing-plan">Certificación T4 + Net Billing</div>
@@ -689,8 +676,7 @@
                     <ul class="pricing-features">
                         <li>Preparación examen SEC</li><li>35 horas intensivas</li><li>Simulacros de examen</li><li>Asesoría personalizada</li><li>Material oficial actualizado</li>
                     </ul>
-                    <!-- 🔴 MP - Precios curso 3 -->
-                    <a href="https://wa.me/56993970158?text=Hola%2C%20quiero%20inscribirme%20en%20el%20curso%20de%20Certificaci%C3%B3n%20T4%20y%20Net%20Billing%20%28%24120.000%29" target="_blank" rel="noopener" class="btn btn-mercadopago">💳 Inscribirme</a>
+                    <a href="https://mpago.li/1LiHmqE" target="_blank" rel="noopener" class="btn btn-mercadopago">💳 Pagar con Mercado Pago</a>
                 </div>
             </div>
         </div>
@@ -702,7 +688,7 @@
             <div class="private-card">
                 <h3>🎓 Clases Particulares</h3>
                 <p>¿Necesitas una atención personalizada? Agenda una clase particular con el Ing. Nicolás Sánchez y resuelve todas tus dudas al instante. Ideal para reforzar temas específicos o preparar certificaciones.</p>
-                <a href="https://wa.me/56993970158?text=Hola%2C%20quiero%20consultar%20por%20Clases%20Particulares" target="_blank" rel="noopener" class="btn btn-whatsapp">💬 Solicitar Clase Particular</a>
+                <a href="https://wa.me/56939701587?text=Hola%2C%20quiero%20consultar%20por%20Clases%20Particulares" target="_blank" rel="noopener" class="btn btn-whatsapp">💬 Solicitar Clase Particular</a>
             </div>
         </div>
     </section>
@@ -714,15 +700,15 @@
             <p class="section-subtitle">Sigue estos sencillos pasos y comienza tu formación hoy mismo.</p>
             <div class="steps-grid">
                 <div class="step-card"><div class="step-number">1</div><h4>Elige tu curso</h4><p>Revisa la descripción y selecciona el que mejor se adapte a tus objetivos.</p></div>
-                <div class="step-card"><div class="step-number">2</div><h4>Haz clic en "Inscribirme"</h4><p>Serás redirigido a Mercado Pago o podrás coordinar por WhatsApp.</p></div>
-                <div class="step-card"><div class="step-number">3</div><h4>Recibe tu acceso</h4><p>Una vez confirmado el pago, te enviaremos por correo las instrucciones y la contraseña de acceso.</p></div>
+                <div class="step-card"><div class="step-number">2</div><h4>Haz clic en "Pagar"</h4><p>Serás redirigido a Mercado Pago para completar el pago de forma 100% segura.</p></div>
+                <div class="step-card"><div class="step-number">3</div><h4>Recibe tu acceso</h4><p>Una vez confirmado el pago, recibirás un correo con tu enlace de acceso al curso.</p></div>
                 <div class="step-card"><div class="step-number">4</div><h4>¡Empieza a aprender!</h4><p>Accede a la plataforma y comienza a formarte con el Ing. Nicolás Sánchez.</p></div>
             </div>
             <div class="bank-info">
                 <h3>🏦 ¿Prefieres transferencia bancaria?</h3>
                 <p>También puedes pagar mediante transferencia a la siguiente cuenta:</p>
                 <p><strong>Banco Estado</strong> · Nicolás Sánchez · Cuenta RUT</p>
-                <p>Escríbenos por WhatsApp al <strong>+56 9 9397 0158</strong> y te enviamos los datos.</p>
+                <p>Escríbenos por WhatsApp al <strong>+56 9 3970 1587</strong> y te enviamos los datos.</p>
             </div>
         </div>
     </section>
@@ -751,7 +737,7 @@
                     <div class="resource-card"><span class="resource-icon">📝</span><h4>Simulacros de examen</h4><p>Practica con exámenes tipo SEC.</p><a href="#" target="_blank">Hacer simulacro →</a></div>
                     <div class="resource-card"><span class="resource-icon">📥</span><h4>Material descargable</h4><p>Guías, normativas y PDF.</p><a href="#" target="_blank">Descargar →</a></div>
                 </div>
-                <p style="text-align:center; margin-top: 30px; color: #aaa;">¿Tienes dudas? Contacta al instructor por WhatsApp <strong>+56 9 9397 0158</strong></p>
+                <p style="text-align:center; margin-top: 30px; color: #aaa;">¿Tienes dudas? Contacta al instructor por WhatsApp <strong>+56 9 3970 1587</strong></p>
             </div>
 
             <div style="margin-top:60px;">
@@ -791,10 +777,10 @@
                     <h3>Contáctanos</h3>
                     <p>¿Listo para dar el siguiente paso? Escríbenos y te responderemos a la brevedad.</p>
                     <div class="contact-detail"><div class="contact-detail-icon">📧</div><div>electricgroupmaule@outlook.com</div></div>
-                    <div class="contact-detail"><div class="contact-detail-icon">📱</div><div>+56 9 9397 0158</div></div>
+                    <div class="contact-detail"><div class="contact-detail-icon">📱</div><div>+56 9 3970 1587</div></div>
                     <div class="contact-detail"><div class="contact-detail-icon">🕐</div><div>Lunes a Sábado: 9:00 - 19:00 hrs</div></div>
                     <div class="contact-detail"><div class="contact-detail-icon">📍</div><div>Región del Maule, Chile</div></div>
-                    <a href="https://wa.me/56993970158?text=Hola%2C%20quiero%20hacer%20una%20consulta" target="_blank" rel="noopener" class="btn btn-whatsapp" style="margin-top:15px;">💬 Escribir por WhatsApp</a>
+                    <a href="https://wa.me/56939701587?text=Hola%2C%20quiero%20hacer%20una%20consulta" target="_blank" rel="noopener" class="btn btn-whatsapp" style="margin-top:15px;">💬 Escribir por WhatsApp</a>
                 </div>
                 <form class="contact-form" id="contactForm" onsubmit="handleFormSubmit(event)">
                     <div class="form-group"><label for="nombre">Nombre completo *</label><input type="text" id="nombre" name="nombre" placeholder="Tu nombre" required></div>
@@ -843,17 +829,16 @@
             <div class="footer-col">
                 <h4>Contacto</h4>
                 <a href="mailto:electricgroupmaule@outlook.com">electricgroupmaule@outlook.com</a>
-                <a href="https://wa.me/56993970158" target="_blank" rel="noopener">+56 9 9397 0158</a>
+                <a href="https://wa.me/56939701587" target="_blank" rel="noopener">+56 9 3970 1587</a>
                 <a href="#">Región del Maule, Chile</a>
             </div>
         </div>
         <div class="footer-bottom">© 2025 ElectricGroupMaule. Todos los derechos reservados. Diseñado con ❤️ para futuros electricistas y especialistas solares.</div>
     </footer>
 
-    <a href="https://wa.me/56993970158?text=Hola%2C%20quiero%20informaci%C3%B3n%20sobre%20los%20cursos" class="whatsapp-float" target="_blank" rel="noopener" aria-label="Contactar por WhatsApp">💬</a>
+    <a href="https://wa.me/56939701587?text=Hola%2C%20quiero%20informaci%C3%B3n%20sobre%20los%20cursos" class="whatsapp-float" target="_blank" rel="noopener" aria-label="Contactar por WhatsApp">💬</a>
 
     <script>
-        // Menú móvil
         const menuToggle = document.getElementById('menuToggle');
         const navLinks = document.getElementById('navLinks');
         menuToggle.addEventListener('click', () => {
@@ -861,7 +846,6 @@
             navLinks.classList.toggle('open');
         });
 
-        // Smooth scroll
         document.querySelectorAll('a[href^="#"]').forEach(anchor => {
             anchor.addEventListener('click', function(e) {
                 const targetId = this.getAttribute('href');
@@ -876,7 +860,6 @@
             });
         });
 
-        // Header scrolled + sección activa
         window.addEventListener('scroll', () => {
             const header = document.getElementById('header');
             header.classList.toggle('scrolled', window.scrollY > 50);
@@ -892,7 +875,6 @@
             });
         });
 
-        // Animaciones de entrada
         const observerOptions = { threshold: 0.1, rootMargin: '0px 0px -50px 0px' };
         const observer = new IntersectionObserver((entries) => {
             entries.forEach(entry => {
@@ -909,7 +891,6 @@
             observer.observe(card);
         });
 
-        // Formulario de contacto → WhatsApp
         function handleFormSubmit(e) {
             e.preventDefault();
             const nombre = document.getElementById('nombre').value;
@@ -918,7 +899,7 @@
             const curso = document.getElementById('curso').value;
             const mensajeTexto = document.getElementById('mensaje').value;
             const texto = `Hola, soy ${nombre}.\n\nCorreo: ${email}\nTeléfono: ${telefono || 'No indicado'}\nCurso de interés: ${curso}\n\nMensaje:\n${mensajeTexto || '(sin mensaje adicional)'}`;
-            const url = `https://wa.me/56993970158?text=${encodeURIComponent(texto)}`;
+            const url = `https://wa.me/56939701587?text=${encodeURIComponent(texto)}`;
             const aviso = document.getElementById('formMessage');
             aviso.style.display = 'block';
             aviso.style.color = 'var(--color-accent)';
